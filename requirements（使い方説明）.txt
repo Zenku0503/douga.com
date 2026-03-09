@@ -1,5 +1,0 @@
-日本語
-これは、flaskを使います。わかんなかったら大回り乗車の刑な(((((
-
-English
-This uses flask.
