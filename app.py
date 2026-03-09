@@ -1,6 +1,8 @@
 from flask import Flask, request, redirect, session, send_from_directory, render_template_string
 import sqlite3
 import os
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.secret_key = "video-site-secret"
@@ -13,16 +15,19 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 def db():
     return sqlite3.connect("site.db")
 
-# 初期DB
+# DB作成
 conn = db()
 c = conn.cursor()
 
-c.execute("""CREATE TABLE IF NOT EXISTS users(
+c.execute("""
+CREATE TABLE IF NOT EXISTS users(
 name TEXT PRIMARY KEY,
 password TEXT
-)""")
+)
+""")
 
-c.execute("""CREATE TABLE IF NOT EXISTS videos(
+c.execute("""
+CREATE TABLE IF NOT EXISTS videos(
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 title TEXT,
 desc TEXT,
@@ -31,17 +36,21 @@ filename TEXT,
 user TEXT,
 views INTEGER DEFAULT 0,
 likes INTEGER DEFAULT 0
-)""")
+)
+""")
 
-c.execute("""CREATE TABLE IF NOT EXISTS comments(
+c.execute("""
+CREATE TABLE IF NOT EXISTS comments(
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 video INTEGER,
 user TEXT,
 text TEXT
-)""")
+)
+""")
 
 conn.commit()
 conn.close()
+
 
 # トップページ
 @app.route("/")
@@ -92,14 +101,15 @@ def login():
         ).fetchone()
 
         if user:
-            if user[0]==pw:
+            if check_password_hash(user[0], pw):
                 session["user"]=name
                 return redirect("/")
             else:
                 msg="パスワードが違います"
         else:
+            hashed = generate_password_hash(pw)
             conn.execute(
-            "INSERT INTO users VALUES(?,?)",(name,pw)
+            "INSERT INTO users VALUES(?,?)",(name,hashed)
             )
             conn.commit()
             session["user"]=name
@@ -131,12 +141,17 @@ def account():
 
         f=request.files["video"]
 
-        if f and len(f.read()) < MAX_SIZE:
+        if f:
 
-            f.seek(0)
-            filename=f.filename
+            filename = secure_filename(f.filename)
+
             path=os.path.join(UPLOAD_FOLDER,filename)
+
             f.save(path)
+
+            if os.path.getsize(path) > MAX_SIZE:
+                os.remove(path)
+                return "動画サイズが大きすぎます（100MBまで）"
 
             title=request.form["title"]
             desc=request.form["desc"]
@@ -287,4 +302,4 @@ def video(name):
     return send_from_directory("videos",name)
 
 
-app.run()
+app.run(host="0.0.0.0", port=10000)
