@@ -145,15 +145,16 @@ def account():
 
     if request.method=="POST":
 
-        f=request.files["video"]
+f = request.files.get("video")
 
-        if f:
+if not f or f.filename == "":
+    return "動画が選択されていません"
 
-            # Cloudinaryへ動画アップロード
-            result = cloudinary.uploader.upload_large(
-                f,
-                resource_type="video"
-            )
+# Cloudinaryへ動画アップロード
+result = cloudinary.uploader.upload_large(
+    f,
+    resource_type="video"
+)
 
             video_url = result["secure_url"]
 
@@ -307,3 +308,4 @@ def comment(id):
 
 
 app.run(host="0.0.0.0", port=10000)
+
