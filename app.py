@@ -1,16 +1,22 @@
-from flask import Flask, request, redirect, session, send_from_directory, render_template_string
+from flask import Flask, request, redirect, session, render_template_string
 import sqlite3
 import os
 from werkzeug.security import generate_password_hash, check_password_hash
-from werkzeug.utils import secure_filename
+
+import cloudinary
+import cloudinary.uploader
 
 app = Flask(__name__)
 app.secret_key = "video-site-secret"
 
-UPLOAD_FOLDER = "videos"
-MAX_SIZE = 100 * 1024 * 1024
+# Cloudinary設定
+cloudinary.config(
+    cloud_name=os.environ.get("CLOUD_NAME"),
+    api_key=os.environ.get("API_KEY"),
+    api_secret=os.environ.get("API_SECRET")
+)
 
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+MAX_SIZE = 100 * 1024 * 1024
 
 def db():
     return sqlite3.connect("site.db")
@@ -143,15 +149,13 @@ def account():
 
         if f:
 
-            filename = secure_filename(f.filename)
+            # Cloudinaryへ動画アップロード
+            result = cloudinary.uploader.upload_large(
+                f,
+                resource_type="video"
+            )
 
-            path=os.path.join(UPLOAD_FOLDER,filename)
-
-            f.save(path)
-
-            if os.path.getsize(path) > MAX_SIZE:
-                os.remove(path)
-                return "動画サイズが大きすぎます（100MBまで）"
+            video_url = result["secure_url"]
 
             title=request.form["title"]
             desc=request.form["desc"]
@@ -161,11 +165,14 @@ def account():
 
             conn.execute(
             "INSERT INTO videos(title,desc,tags,filename,user) VALUES(?,?,?,?,?)",
-            (title,desc,tags,filename,session["user"])
+            (title,desc,tags,video_url,session["user"])
             )
 
             conn.commit()
             conn.close()
+
+            return redirect("/")  # 投稿後トップへ
+
 
     return render_template_string("""
     <h1>アカウント: {{user}}</h1>
@@ -239,7 +246,7 @@ def watch(id):
     conn=db()
 
     v=conn.execute(
-        "SELECT title,desc,filename,views FROM videos WHERE id=?",(id,)
+        "SELECT title,desc,filename,views,user FROM videos WHERE id=?",(id,)
     ).fetchone()
 
     conn.execute(
@@ -257,8 +264,10 @@ def watch(id):
 
     <h1>{{v[0]}}</h1>
 
+    <p>投稿者: {{v[4]}}</p>
+
     <video width="500" controls>
-    <source src="/video/{{v[2]}}">
+    <source src="{{v[2]}}">
     </video>
 
     <p>{{v[1]}}</p>
@@ -295,11 +304,6 @@ def comment(id):
     conn.close()
 
     return redirect("/watch/"+str(id))
-
-
-@app.route("/video/<name>")
-def video(name):
-    return send_from_directory("videos",name)
 
 
 app.run(host="0.0.0.0", port=10000)
