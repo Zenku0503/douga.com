@@ -149,11 +149,17 @@ def account():
 
         if f:
 
-            # Cloudinaryへ動画アップロード
+            # 一時保存
+            temp_path = "upload_temp.mp4"
+            f.save(temp_path)
+
+            # Cloudinaryアップロード
             result = cloudinary.uploader.upload_large(
-                f,
+                temp_path,
                 resource_type="video"
             )
+
+            os.remove(temp_path)
 
             video_url = result["secure_url"]
 
@@ -304,6 +310,7 @@ def comment(id):
 
     return redirect("/watch/"+str(id))
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
 
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
