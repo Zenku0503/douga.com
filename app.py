@@ -16,8 +16,6 @@ cloudinary.config(
     api_secret=os.environ.get("API_SECRET")
 )
 
-MAX_SIZE = 100 * 1024 * 1024
-
 def db():
     return sqlite3.connect("site.db")
 
@@ -91,7 +89,7 @@ def home():
     """, videos=videos)
 
 
-# ログイン / 作成
+# ログイン / アカウント作成
 @app.route("/login", methods=["GET","POST"])
 def login():
 
@@ -109,6 +107,7 @@ def login():
         if user:
             if check_password_hash(user[0], pw):
                 session["user"]=name
+                conn.close()
                 return redirect("/")
             else:
                 msg="パスワードが違います"
@@ -119,6 +118,7 @@ def login():
             )
             conn.commit()
             session["user"]=name
+            conn.close()
             return redirect("/")
 
         conn.close()
@@ -145,16 +145,15 @@ def account():
 
     if request.method=="POST":
 
-f = request.files.get("video")
+        f = request.files.get("video")
 
-if not f or f.filename == "":
-    return "動画が選択されていません"
+        if f:
 
-# Cloudinaryへ動画アップロード
-result = cloudinary.uploader.upload_large(
-    f,
-    resource_type="video"
-)
+            # Cloudinaryへ動画アップロード
+            result = cloudinary.uploader.upload_large(
+                f,
+                resource_type="video"
+            )
 
             video_url = result["secure_url"]
 
@@ -172,8 +171,7 @@ result = cloudinary.uploader.upload_large(
             conn.commit()
             conn.close()
 
-            return redirect("/")  # 投稿後トップへ
-
+            return redirect("/")
 
     return render_template_string("""
     <h1>アカウント: {{user}}</h1>
@@ -308,4 +306,3 @@ def comment(id):
 
 
 app.run(host="0.0.0.0", port=10000)
-
