@@ -1,6 +1,7 @@
 from flask import Flask, request, redirect, session, render_template_string
 import sqlite3
 import os
+import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
 
 import cloudinary
@@ -19,7 +20,8 @@ cloudinary.config(
 def db():
     return sqlite3.connect("site.db")
 
-# DB作成
+
+# データベース作成
 conn = db()
 c = conn.cursor()
 
@@ -38,8 +40,7 @@ desc TEXT,
 tags TEXT,
 filename TEXT,
 user TEXT,
-views INTEGER DEFAULT 0,
-likes INTEGER DEFAULT 0
+views INTEGER DEFAULT 0
 )
 """)
 
@@ -66,17 +67,12 @@ def home():
     ).fetchall()
     conn.close()
 
-    login_message = ""
-    if "user" not in session:
-        login_message = "<p>ログインしてください</p>"
-
     return render_template_string("""
+
     <h1>動画.com</h1>
 
-    <button onclick="location.href='/videos'">すべての動画</button>
-    <button onclick="location.href='/account'">アカウント</button>
-
-    """ + login_message + """
+    <a href="/videos">動画一覧</a>
+    <a href="/account">アカウント</a>
 
     <h2>最新動画</h2>
 
@@ -86,16 +82,18 @@ def home():
     ({{v[2]}}再生)
     </p>
     {% endfor %}
+
     """, videos=videos)
 
 
-# ログイン / アカウント作成
+# ログイン
 @app.route("/login", methods=["GET","POST"])
 def login():
 
     msg=""
 
     if request.method=="POST":
+
         name=request.form["name"]
         pw=request.form["pw"]
 
@@ -105,63 +103,82 @@ def login():
         ).fetchone()
 
         if user:
+
             if check_password_hash(user[0], pw):
+
                 session["user"]=name
                 conn.close()
                 return redirect("/")
+
             else:
-                msg="パスワードが違います"
+                msg="パスワード違い"
+
         else:
-            hashed = generate_password_hash(pw)
+
+            hashed=generate_password_hash(pw)
+
             conn.execute(
             "INSERT INTO users VALUES(?,?)",(name,hashed)
             )
+
             conn.commit()
+
             session["user"]=name
             conn.close()
+
             return redirect("/")
 
         conn.close()
 
     return render_template_string("""
-    <h1>ログイン / アカウント作成</h1>
+
+    <h1>ログイン</h1>
 
     <form method="post">
-    名前 <input name="name"><br>
-    パスワード <input name="pw" type="password"><br>
+
+    名前<br>
+    <input name="name"><br>
+
+    パスワード<br>
+    <input name="pw" type="password"><br>
+
     <button>送信</button>
+
     </form>
 
-    {{msg}}
+    <p>{{msg}}</p>
+
     """,msg=msg)
 
 
-# アカウント画面
+# アカウント
 @app.route("/account",methods=["GET","POST"])
 def account():
 
     if "user" not in session:
         return redirect("/login")
 
+    error=""
+
     if request.method=="POST":
 
-        f = request.files.get("video")
+        try:
 
-        if f:
+            f=request.files["video"]
 
-            # 一時保存
-            temp_path = "upload_temp.mp4"
+            filename=str(uuid.uuid4())+".mp4"
+            temp_path="/tmp/"+filename
+
             f.save(temp_path)
 
-            # Cloudinaryアップロード
-            result = cloudinary.uploader.upload_large(
+            result = cloudinary.uploader.upload(
                 temp_path,
                 resource_type="video"
             )
 
             os.remove(temp_path)
 
-            video_url = result["secure_url"]
+            url=result["secure_url"]
 
             title=request.form["title"]
             desc=request.form["desc"]
@@ -171,7 +188,7 @@ def account():
 
             conn.execute(
             "INSERT INTO videos(title,desc,tags,filename,user) VALUES(?,?,?,?,?)",
-            (title,desc,tags,video_url,session["user"])
+            (title,desc,tags,url,session["user"])
             )
 
             conn.commit()
@@ -179,65 +196,61 @@ def account():
 
             return redirect("/")
 
+        except Exception as e:
+
+            error=str(e)
+
     return render_template_string("""
+
     <h1>アカウント: {{user}}</h1>
 
     <h2>動画投稿</h2>
 
     <form method="post" enctype="multipart/form-data">
 
-    動画名<br>
+    タイトル<br>
     <input name="title"><br>
 
     説明<br>
     <textarea name="desc"></textarea><br>
 
-    ハッシュタグ<br>
+    タグ<br>
     <input name="tags"><br>
 
     動画<br>
-    <input type="file" name="video"><br>
+    <input type="file" name="video"><br><br>
 
     <button>投稿</button>
 
     </form>
-    """,user=session["user"])
+
+    <p style="color:red">{{error}}</p>
+
+    """,user=session["user"],error=error)
 
 
 # 動画一覧
 @app.route("/videos")
 def videos():
 
-    sort=request.args.get("sort","new")
-
-    query="ORDER BY id DESC"
-
-    if sort=="old":
-        query="ORDER BY id ASC"
-    if sort=="views":
-        query="ORDER BY views DESC"
-
     conn=db()
+
     vids=conn.execute(
-        "SELECT id,title,views FROM videos "+query
+        "SELECT id,title,views FROM videos ORDER BY id DESC"
     ).fetchall()
+
     conn.close()
 
     return render_template_string("""
 
     <h1>動画一覧</h1>
 
-    並び替え
-    <a href="?sort=new">最新</a>
-    <a href="?sort=old">最古</a>
-    <a href="?sort=views">再生数</a>
-
-    <hr>
-
     {% for v in vids %}
     <p>
+
     <a href="/watch/{{v[0]}}">{{v[1]}}</a>
     ({{v[2]}}再生)
+
     </p>
     {% endfor %}
 
@@ -276,6 +289,7 @@ def watch(id):
     </video>
 
     <p>{{v[1]}}</p>
+
     <p>{{v[3]}}再生</p>
 
     <h2>コメント</h2>
@@ -301,10 +315,12 @@ def comment(id):
     text=request.form["text"]
 
     conn=db()
+
     conn.execute(
     "INSERT INTO comments(video,user,text) VALUES(?,?,?)",
     (id,session["user"],text)
     )
+
     conn.commit()
     conn.close()
 
@@ -312,5 +328,6 @@ def comment(id):
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+
+    port=int(os.environ.get("PORT",10000))
+    app.run(host="0.0.0.0",port=port)
