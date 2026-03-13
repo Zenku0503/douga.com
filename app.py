@@ -18,9 +18,10 @@ cloudinary.config(
     api_secret=os.environ.get("API_SECRET")
 )
 
-# Railway用DB
+DB_PATH="/tmp/site.db"
+
 def db():
-    return sqlite3.connect("site.db", check_same_thread=False)
+    return sqlite3.connect(DB_PATH, check_same_thread=False)
 
 
 conn=db()
@@ -413,5 +414,5 @@ def watch(id):
 
 if __name__=="__main__":
 
-    port=int(os.environ.get("PORT",10000))
+    port=int(os.environ.get("PORT",8080))
     app.run(host="0.0.0.0",port=port)
