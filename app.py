@@ -368,10 +368,24 @@ def videos():
     """,vids=vids)
 
 
-@app.route("/watch/<int:id>")
+@app.route("/watch/<int:id>",methods=["GET","POST"])
 def watch(id):
 
     conn=db()
+
+    if request.method=="POST":
+
+        if "user" not in session:
+            return redirect("/login")
+
+        text=request.form["text"]
+
+        conn.execute(
+        "INSERT INTO comments(video,user,text) VALUES(?,?,?)",
+        (id,session["user"],text)
+        )
+
+        conn.commit()
 
     v=conn.execute(
     "SELECT title,desc,filename,views,user FROM videos WHERE id=?",(id,)
@@ -402,6 +416,17 @@ def watch(id):
     <p>{{v[3]}}再生</p>
 
     <h2>コメント</h2>
+
+    {% if session.get("user") %}
+    <form method="post">
+    <textarea name="text"></textarea><br>
+    <button>コメント投稿</button>
+    </form>
+    {% else %}
+    <p>コメントするにはログインしてください</p>
+    {% endif %}
+
+    <hr>
 
     {% for c in comments %}
     <p>
