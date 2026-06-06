@@ -1,4 +1,0 @@
-Flask
-cloudinary
-gunicorn
-werkzeug
